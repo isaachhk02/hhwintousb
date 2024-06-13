@@ -1,0 +1,105 @@
+#!/bin/bash
+# Windows to USB SCRIPT BY HH02 (isaacfhl)
+
+
+devices=$(find /dev | grep sd)
+
+
+export device_select=""
+
+if [ $EUID -eq 0 ]; then
+
+    if [ ! -f /usr/bin/zenity ]; then
+        echo "Installing zenity!"
+        if [ -f /usr/bin/pacman ]; then
+            pacman -S zenity --noconfirm
+        fi
+        if [ -f /usr/bin/apt ]; then
+            apt install zenity -y
+        fi
+        if [ -f /usr/bin/dnf ]; then
+            dnf install zenity -y
+        fi
+        echo "Done!"
+    fi
+    zenity --warning \
+    --text="Welcome to WinToUSB 1.0 this it's a experimental script please use your responsability THIS SUPPORTS FOR UEFI ONLY!"
+
+    zenity --info \
+    --text="For start, please select the Windows ISO... "
+    mountiso=$(zenity --file-selection --title="Select a Windows ISO")
+
+    case $? in
+        0) 
+            echo "Selected" "$mountiso";;
+        1)
+            echo "No file selected!";;
+        -1)
+            echo "Unexpected error has occurred!";;
+    esac
+
+
+    device_select=$(zenity --list \
+    --title="Choose your target device" \
+    --column="Device" \
+    --text="Select the device. DONT USE A PARTITION! ALL PARTITIONS WILL BE DESTROYED!" \
+    $devices
+    )
+    device_selected=$?
+        if [ $device_selected -eq 0 ]; then
+            echo "$device_select"
+            if [ -z "$device_select" ]; then
+                zenity --error \
+                --text="Please select a disk!"
+                device_select=$(zenity --list \
+                --title="Choose your target device" \
+                --column="Device" \
+                --text="Select the device. DONT USE A PARTITION!" \
+                $devices
+                )
+            else
+            {
+                umount -f -l "$device_select"*
+                echo "10" ; sleep 1
+                echo "# Wiping $device_select" ; sleep 1
+                sgdisk -Z "$device_select" ; sleep 1
+                echo "20" ; sleep 1
+                echo "# Making partition table...." ; sleep 1
+                parted "$device_select" mklabel gpt ; sleep 1
+                echo "30" ; sleep 1
+                echo "# Making partitions..." ; sleep 1
+                parted -s "$device_select" mkpart primary fat32 1MB 1024MB ; sleep 1
+                wget https://raw.githubusercontent.com/pbatard/rufus/master/res/uefi/uefi-ntfs.img
+                dd if=uefi-ntfs.img of="$device_select"1
+                parted -s "$device_select" mkpart primary ntfs 1025MB 100%; sleep 1
+                mkfs.ntfs --quick "$device_select"2
+                echo "50" ; sleep 1
+                mkdir /mnt/iso
+                mkdir /mnt/target
+                mount -t auto "$mountiso" /mnt/iso
+                echo "# Copying files...."
+                mount "$device_select"2 /mnt/target
+                cp -rvf /mnt/iso/* /mnt/target/ ; sleep 1
+                echo "75" ; sleep 1
+                umount -l -f /mnt/iso
+                echo "95" ; sleep 1
+                umount -l -f /mnt/target
+                echo "100" ; sleep 1
+            } |
+            zenity --progress \
+            --title="Progress" \
+            --pulsate \
+			--no-cancel \
+			--auto-close \
+            --text="Erasing and wiping $device_select" \
+            --percentage=0
+            fi
+            
+            zenity --info \
+            --text="USB Has created.... now reboot your computer and boot with usb!"
+        else
+            echo "Canceling..."
+        fi
+else
+    echo "ERROR : Please run as root!"
+fi
