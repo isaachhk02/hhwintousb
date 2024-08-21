@@ -2,7 +2,7 @@
 # Windows to USB SCRIPT BY HH02 (isaacfhl)
 
 
-devices=$(ls /dev | grep sd)
+devices=$(ls /dev/sd*)
 
 
 export device_select=""
